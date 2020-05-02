@@ -7,10 +7,12 @@ import '@material/mwc-icon-button'
 import '@material/mwc-button'
 import '@material/mwc-dialog'
 import '@material/mwc-textfield'
+import '@material/mwc-snackbar'
 import { Dialog } from "@material/mwc-dialog";
+import clipboard from "@vdegenne/clipboard-copy";
 
-import { validateForm, resetForm } from '@vdegenne/mwc-forms-util'
 import { TextField } from "@material/mwc-textfield";
+import { Snackbar } from "@material/mwc-snackbar";
 
 declare interface Todo {
   name: string
@@ -24,13 +26,26 @@ export class TodoList extends LitElement {
 
   @property() dialogAction: 'add' | 'update';
   @property() todoToUpdate: Todo;
+  @property({ attribute: false }) protected _selectedTodo: Todo;
 
   @query('mwc-dialog') dialog: Dialog;
   @query('mwc-dialog > form') form: HTMLFormElement;
+  @query('mwc-snackbar') snackbar: Snackbar;
 
   constructor() {
     super();
     this.loadTodos()
+
+    window.addEventListener('keydown', (e) => {
+      if (this._selectedTodo) {
+        if (e.keyCode === 38) {
+          this.onClickArrowUp(null, this._selectedTodo)
+        }
+        if (e.keyCode === 40) {
+          this.onClickArrowDown(null, this._selectedTodo)
+        }
+      }
+    });
   }
 
   protected loadTodos() {
@@ -60,11 +75,15 @@ export class TodoList extends LitElement {
     .todo:hover {
       /* background-color: #eeeeee; */
     }
+    .todo[selected] {
+      background-color: #cccccc;
+    }
     .todo > .name {
       flex:1;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      margin-left: 5px;
     }
     .todo > .name[checked] {
       text-decoration: line-through;
@@ -76,34 +95,48 @@ export class TodoList extends LitElement {
       user-select: none;
     }
 
+    #controls {
+      display: flex;
+      align-items: center;
+      margin: 10px;
+    }
+
     mwc-icon-button {
       --mdc-icon-button-size: 28px;
-      --mdc-icon-size: 18px;
+      --mdc-icon-size: 16px;
     }
     `
   ]
 
   protected render() {
     return html`
-    ${this.list.map(todo => {
+    ${this.list.map((todo, i) => {
       // transform the urls
       const name = todo.name.replace(/https?:\/\/[^)\] ]+/g, function (match) {
         return `<a href="${match}" target="_blank">${match}</a>`
       });
 
       return html`
-      <div class="todo">
-        <mwc-checkbox @click=${() => this.onCheckboxClick(todo)} ?checked=${todo.checked}></mwc-checkbox>
+      <div class="todo" @click=${() => this._selectedTodo = todo} ?selected=${this._selectedTodo && this._selectedTodo === todo}>
+        <mwc-checkbox @click=${(e) => this.onCheckboxClick(e, todo)} ?checked=${todo.checked}></mwc-checkbox>
         <div class="name" ?checked=${todo.checked}>${unsafeHTML(name)}</div>
         <mwc-icon-button @click=${() => this.openUpdateDialog(todo)} icon=edit></mwc-icon-button>
-        <mwc-icon-button icon="arrow_upward" @click="${() => this.onClickArrowUp(todo)}"></mwc-icon-button>
-        <mwc-icon-button icon="arrow_downward" @click=${() => this.onClickArrowDown(todo)}></mwc-icon-button>
+        <mwc-icon-button icon="arrow_upward" @click="${(e) => this.onClickArrowUp(e, todo)}"
+            ?disabled=${i === 0}></mwc-icon-button>
+        <mwc-icon-button icon="arrow_downward" @click=${(e) => this.onClickArrowDown(e, todo)}
+            ?disabled=${i === this.list.length - 1}></mwc-icon-button>
         <mwc-icon-button icon="delete" @click=${() => this.onDeleteClick(todo)}></mwc-icon-button>
       </div>`
     })} 
 
-    <mwc-button raised icon="add" style="display:inline-block;margin:20px" @click=${this.openInsertDialog}>add a todo</mwc-button>
+    <div id=controls>
+      <mwc-button raised icon="add" style="display:inline-block;margin:20px" @click=${this.openInsertDialog}>add a todo</mwc-button>
+      <mwc-button icon="check_box_outline_blank" @click=${this.uncheckAll}>uncheck all</mwc-button>
+      <mwc-button icon="assignment" @click=${this.copyListToClipBoard}>copy list</mwc-button>
+      <!-- <mwc-icon-button icon="check_box_outline_blank"></mwc-icon-button>uncheck all -->
+    </div>
 
+    <mwc-snackbar></mwc-snackbar>
 
     <mwc-dialog heading="${this.dialogAction} todo">
       <form>
@@ -114,6 +147,18 @@ export class TodoList extends LitElement {
       <mwc-button slot="primaryAction" @click=${this.onDialogAccept}>${this.dialogAction}</mwc-button>
     </mwc-dialog>
     `
+  }
+
+  uncheckAll() {
+    this.list.forEach(todo => todo.checked = false)
+    this.saveTodos();
+    this.requestUpdate()
+  }
+
+  copyListToClipBoard() {
+    clipboard(this.list.map(todo => todo.name).join('\n'))
+    this.snackbar.labelText = 'copied to clipboard'
+    this.snackbar.open()
   }
 
   protected openInsertDialog() {
@@ -161,22 +206,30 @@ export class TodoList extends LitElement {
     input.setCustomValidity('')
   }
 
-  protected onClickArrowUp(todo: Todo) {
+  protected onClickArrowUp(e: MouseEvent | null, todo: Todo) {
+    if (e) {
+      e.stopPropagation();
+    }
     let index
     if ((index = this.list.indexOf(todo)) !== 0) {
       const replaceWith = this.list[index - 1]
       this.list[index - 1] = todo
       this.list[index] = replaceWith
+      this._selectedTodo = todo
       this.requestUpdate()
       this.saveTodos()
     }
   }
-  protected onClickArrowDown(todo: Todo) {
+  protected onClickArrowDown(e: MouseEvent | null, todo: Todo) {
+    if (e) {
+      e.stopPropagation()
+    }
     let index
     if ((index = this.list.indexOf(todo)) !== this.list.length - 1) {
-      const replaceWith = this.list[this.list.length - 1]
-      this.list[this.list.length - 1] = todo
+      const replaceWith = this.list[index + 1]
+      this.list[index + 1] = todo
       this.list[index] = replaceWith
+      this._selectedTodo = todo
       this.requestUpdate()
       this.saveTodos()
     }
@@ -191,8 +244,10 @@ export class TodoList extends LitElement {
     }
   }
 
-  protected onCheckboxClick(todo: Todo) {
+  protected onCheckboxClick(e: MouseEvent, todo: Todo) {
+    e.stopPropagation();
     todo.checked = !todo.checked
+    this._selectedTodo = todo;
     this.requestUpdate()
     this.saveTodos()
   }

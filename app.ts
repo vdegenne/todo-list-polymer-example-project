@@ -10,9 +10,11 @@ import '@material/mwc-textfield'
 import '@material/mwc-snackbar'
 import { Dialog } from "@material/mwc-dialog";
 import clipboard from "@vdegenne/clipboard-copy";
+import '@material/mwc-textarea';
 
 import { TextField } from "@material/mwc-textfield";
 import { Snackbar } from "@material/mwc-snackbar";
+import { TextArea } from "@material/mwc-textarea";
 
 declare interface Todo {
   name: string
@@ -28,8 +30,9 @@ export class TodoList extends LitElement {
   @property() todoToUpdate: Todo;
   @property({ attribute: false }) protected _selectedTodo: Todo;
 
-  @query('mwc-dialog') dialog: Dialog;
-  @query('mwc-dialog > form') form: HTMLFormElement;
+  @query('mwc-dialog#todo-dialog') dialog: Dialog;
+  @query('mwc-dialog#todo-dialog > form') form: HTMLFormElement;
+  // @query('mwc-dialog#import-dialog') importDialog: Dialog
   @query('mwc-snackbar') snackbar: Snackbar;
 
   constructor() {
@@ -131,20 +134,34 @@ export class TodoList extends LitElement {
 
     <div id=controls>
       <mwc-button raised icon="add" style="display:inline-block;margin:20px" @click=${this.openInsertDialog}>add a todo</mwc-button>
-      <mwc-button icon="check_box_outline_blank" @click=${this.uncheckAll}>uncheck all</mwc-button>
-      <mwc-button icon="assignment" @click=${this.copyListToClipBoard}>copy list</mwc-button>
+      <mwc-button dense icon="check_box_outline_blank" @click=${this.uncheckAll}>uncheck all</mwc-button>
+      <mwc-button dense icon="assignment" @click=${this.copyListToClipBoard}>copy list</mwc-button>
+      <mwc-button dense icon="system_update_alt" @click=${this.onImportListClick}>import list</mwc-button>
       <!-- <mwc-icon-button icon="check_box_outline_blank"></mwc-icon-button>uncheck all -->
     </div>
 
     <mwc-snackbar></mwc-snackbar>
 
-    <mwc-dialog heading="${this.dialogAction} todo">
+    <mwc-dialog heading="${this.dialogAction} todo" id="todo-dialog">
       <form>
         <mwc-textfield label="name *" dialogInitialFocus></mwc-textfield>
       </form>
 
       <mwc-button slot="secondaryAction" dialogAction=cancel>cancel</mwc-button>
       <mwc-button slot="primaryAction" @click=${this.onDialogAccept}>${this.dialogAction}</mwc-button>
+    </mwc-dialog>
+
+    <mwc-dialog heading="Import list" id="import-dialog">
+      <mwc-textarea
+          label="list"
+          rows=10
+          helper="one todo per line"
+          helperPersistent
+          dialogInitialFocus
+          @keydown=${(e: KeyboardEvent) => e.stopImmediatePropagation()}     
+      ></mwc-textarea>
+      <mwc-button slot=secondaryAction dialogAction=cancel>cancel</mwc-button>
+      <mwc-button slot=primaryAction @click=${this.onImportDialogAccept}>import</mwc-button>
     </mwc-dialog>
     `
   }
@@ -160,6 +177,38 @@ export class TodoList extends LitElement {
     this.snackbar.labelText = 'copied to clipboard'
     this.snackbar.open()
   }
+
+  onImportListClick() {
+    const dialog = this.shadowRoot!.querySelector('#import-dialog') as Dialog;
+    dialog.open = true;
+  }
+  protected onImportDialogAccept() {
+    const dialog = this.shadowRoot!.querySelector('#import-dialog') as Dialog;
+    const input = dialog.querySelector('mwc-textarea') as TextArea;
+
+    // verify the validation
+    if (input.value === '') {
+      input.setCustomValidity('required')
+      input.reportValidity()
+      return;
+    }
+
+    // else we add the todos in the current list
+    this.list = input.value.split('\n').map(line => {
+      return {
+        name: line,
+        checked: false
+      }
+    });
+    this.requestUpdate()
+    this.saveTodos()
+
+    // finally we reset and close
+    input.value = '';
+    input.setCustomValidity('')
+    dialog.close()
+  }
+
 
   protected openInsertDialog() {
     this.dialogAction = 'add';

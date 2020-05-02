@@ -1,1 +1,3 @@
-[demo](https://htmlpreview.github.io/?https://raw.githubusercontent.com/vdegenne/todo-list-polymer-example-project/master/index.html)
+## Demo
+
+[https://vdegenne.github.io/todo-list-polymer-example-project/](https://vdegenne.github.io/todo-list-polymer-example-project)
